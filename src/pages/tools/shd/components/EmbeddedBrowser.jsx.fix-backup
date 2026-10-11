@@ -1,0 +1,148 @@
+import { useEffect, useState } from 'react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  RotateCw,
+  Globe,
+  ExternalLink,
+} from 'lucide-react'
+
+export default function EmbeddedBrowser() {
+  const [url, setUrl] = useState('https://example.com')
+  const [currentUrl, setCurrentUrl] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const api = window.browserAPI
+    if (!api) {
+      setError('Không tìm thấy browserAPI. Hãy khởi động lại Electron.')
+      return
+    }
+
+    const unsubscribe = api.onUrlChanged((nextUrl) => {
+      setCurrentUrl(nextUrl)
+      setUrl(nextUrl)
+    })
+
+    api.getUrl().then((value) => {
+      if (value) {
+        setCurrentUrl(value)
+        setUrl(value)
+      }
+    }).catch(() => {})
+
+    return unsubscribe
+  }, [])
+
+  async function navigate(event) {
+    event?.preventDefault()
+
+    let target = url.trim()
+    if (!target) return
+
+    if (!/^https?:\/\//i.test(target)) {
+      target = `https://${target}`
+    }
+
+    try {
+      setLoading(true)
+      setError('')
+      await window.browserAPI.open(target)
+      setCurrentUrl(target)
+      setUrl(target)
+    } catch (err) {
+      setError(err?.message || 'Không thể mở trang web.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function runAction(action) {
+    try {
+      setError('')
+      await window.browserAPI[action]()
+    } catch (err) {
+      setError(err?.message || 'Thao tác thất bại.')
+    }
+  }
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-white/10 bg-[#10131a]">
+      <div className="flex items-center gap-2 border-b border-white/10 p-3">
+        <button
+          type="button"
+          title="Quay lại"
+          onClick={() => runAction('back')}
+          className="rounded-lg p-2 text-gray-300 hover:bg-white/10"
+        >
+          <ArrowLeft size={16} />
+        </button>
+
+        <button
+          type="button"
+          title="Tiến tới"
+          onClick={() => runAction('forward')}
+          className="rounded-lg p-2 text-gray-300 hover:bg-white/10"
+        >
+          <ArrowRight size={16} />
+        </button>
+
+        <button
+          type="button"
+          title="Tải lại"
+          onClick={() => runAction('reload')}
+          className="rounded-lg p-2 text-gray-300 hover:bg-white/10"
+        >
+          <RotateCw size={16} />
+        </button>
+
+        <form onSubmit={navigate} className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[#0b0d12] px-3">
+            <Globe size={15} className="shrink-0 text-gray-500" />
+            <input
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="Nhập URL website..."
+              className="w-full min-w-0 bg-transparent py-2 text-sm text-gray-200 outline-none"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="rounded-lg bg-violet-600 px-3 py-2 text-sm hover:bg-violet-500 disabled:opacity-50"
+          >
+            {loading ? 'Đang mở...' : 'Đi đến'}
+          </button>
+        </form>
+
+        <button
+          type="button"
+          title="Mở trong trình duyệt mặc định"
+          onClick={() => {
+            if (currentUrl) window.browserAPI.open(currentUrl)
+          }}
+          className="rounded-lg p-2 text-gray-400 hover:bg-white/10"
+        >
+          <ExternalLink size={16} />
+        </button>
+      </div>
+
+      {error && (
+        <p className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+          {error}
+        </p>
+      )}
+
+      <div className="flex items-center gap-2 px-4 py-2 text-xs text-gray-500">
+        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        {currentUrl || 'Chưa mở website'}
+      </div>
+
+      <div className="flex min-h-24 items-center justify-center border-t border-white/5 px-5 py-8 text-center text-sm text-gray-500">
+        Khu vực website sẽ được Electron hiển thị tại đây.
+      </div>
+    </section>
+  )
+}
