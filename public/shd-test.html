@@ -1,0 +1,132 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SHD - Môi trường kiểm thử</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      font-family: Arial, sans-serif;
+      background: #f3f5f9;
+      color: #1f2937;
+    }
+    .container {
+      max-width: 900px;
+      margin: auto;
+      padding: 28px;
+      background: white;
+      border-radius: 14px;
+      box-shadow: 0 8px 28px #0000000d;
+    }
+    h1 { margin-top: 0; }
+    .notice {
+      padding: 12px 16px;
+      background: #fff7d6;
+      border-radius: 8px;
+      color: #775600;
+      margin-bottom: 24px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    label { display: block; font-size: 14px; }
+    input {
+      display: block;
+      width: 100%;
+      margin-top: 7px;
+      padding: 11px;
+      border: 1px solid #cbd5e1;
+      border-radius: 7px;
+      font-size: 15px;
+    }
+    button {
+      margin-top: 22px;
+      padding: 11px 18px;
+      border: 0;
+      border-radius: 7px;
+      background: #087f5b;
+      color: white;
+      cursor: pointer;
+    }
+    #status { margin-top: 16px; color: #087f5b; }
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>SHD — Trang nghiệp vụ giả lập</h1>
+
+    <div class="notice">
+      Môi trường kiểm thử tại máy cá nhân. Tất cả dữ liệu bên dưới đều là dữ liệu giả.
+    </div>
+
+    <form id="shd-form">
+      <div class="form-grid">
+        <label>
+          Số hợp đồng (SHD)
+          <input id="SHD" name="SHD" value="TEST-SHD-001">
+        </label>
+
+        <label>
+          Tên khách hàng
+          <input id="TEN_KH" name="TEN_KH" value="Nguyen Van A">
+        </label>
+
+        <label>
+          Ngày sinh
+          <input id="DOB" name="DOB" value="01/01/1990">
+        </label>
+
+        <label>
+          CMND/CCCD
+          <input id="CMND_CCCD" name="CMND_CCCD" value="000000000000">
+        </label>
+
+        <label>
+          Số điện thoại
+          <input id="SDT" name="SDT" value="0900000000">
+        </label>
+
+        <label>
+          GIN
+          <input id="GIN" name="GIN" value="TEST-GIN-001">
+        </label>
+
+        <label>
+          Chức danh
+          <input id="CHUC_DANH" name="CHUC_DANH" value="Nhan vien">
+        </label>
+
+        <label>
+          Tên công ty
+          <input id="TEN_CTY" name="TEN_CTY" value="Cong ty kiem thu">
+        </label>
+
+        <label>
+          Phòng ban
+          <input id="PB" name="PB" value="Phong thu nghiem">
+        </label>
+      </div>
+
+      <button type="submit">Kiểm tra biểu mẫu</button>
+      <p id="status" role="status"></p>
+    </form>
+  </main>
+
+  <script>
+    document.getElementById('shd-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      document.getElementById('status').textContent =
+        'Biểu mẫu thử nghiệm hoạt động bình thường.';
+    });
+  </script>
+</body>
+</html>

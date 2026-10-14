@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, RotateCw, Globe } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  RotateCw,
+  Globe,
+  Maximize2,
+  Minimize2,
+} from 'lucide-react'
 
 export default function EmbeddedBrowser() {
   const [url, setUrl] = useState('https://example.com')
   const [currentUrl, setCurrentUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [expanded, setExpanded] = useState(false)
   const viewportRef = useRef(null)
 
   useEffect(() => {
@@ -21,6 +29,7 @@ export default function EmbeddedBrowser() {
       if (!el) return
 
       const rect = el.getBoundingClientRect()
+
       api.setBounds({
         x: rect.left,
         y: rect.top,
@@ -30,11 +39,15 @@ export default function EmbeddedBrowser() {
     }
 
     const observer = new ResizeObserver(updateBounds)
-    if (viewportRef.current) observer.observe(viewportRef.current)
+
+    if (viewportRef.current) {
+      observer.observe(viewportRef.current)
+    }
 
     window.addEventListener('resize', updateBounds)
     window.addEventListener('scroll', updateBounds, true)
-    updateBounds()
+
+    const timer = requestAnimationFrame(updateBounds)
 
     const unsubscribe = api.onUrlChanged((nextUrl) => {
       setCurrentUrl(nextUrl)
@@ -51,6 +64,7 @@ export default function EmbeddedBrowser() {
       .catch(() => {})
 
     return () => {
+      cancelAnimationFrame(timer)
       observer.disconnect()
       window.removeEventListener('resize', updateBounds)
       window.removeEventListener('scroll', updateBounds, true)
@@ -59,17 +73,38 @@ export default function EmbeddedBrowser() {
     }
   }, [])
 
+  useEffect(() => {
+    const timer = requestAnimationFrame(() => {
+      const el = viewportRef.current
+      if (!el || !window.browserAPI) return
+
+      const rect = el.getBoundingClientRect()
+
+      window.browserAPI.setBounds({
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+      })
+    })
+
+    return () => cancelAnimationFrame(timer)
+  }, [expanded])
+
   async function navigate(event) {
     event.preventDefault()
 
     let target = url.trim()
     if (!target) return
 
-    if (!/^https?:\/\//i.test(target)) target = `https://${target}`
+    if (!/^https?:\/\//i.test(target)) {
+      target = `https://${target}`
+    }
 
     try {
       setLoading(true)
       setError('')
+
       const result = await window.browserAPI.open(target)
       setCurrentUrl(result.url || target)
       setUrl(result.url || target)
@@ -90,20 +125,36 @@ export default function EmbeddedBrowser() {
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-white/10 bg-[#10131a]">
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 p-3">
-        <button type="button" title="Quay lại" onClick={() => runAction('back')}
-          className="rounded-lg p-2 text-gray-300 hover:bg-white/10">
+    <section
+      className={`overflow-hidden rounded-xl border border-white/10 bg-[#10131a] ${
+        expanded ? 'fixed inset-3 z-50 flex flex-col shadow-2xl' : ''
+      }`}
+    >
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 p-3">
+        <button
+          type="button"
+          title="Quay lại"
+          onClick={() => runAction('back')}
+          className="rounded-lg p-2 text-gray-300 hover:bg-white/10"
+        >
           <ArrowLeft size={16} />
         </button>
 
-        <button type="button" title="Tiến tới" onClick={() => runAction('forward')}
-          className="rounded-lg p-2 text-gray-300 hover:bg-white/10">
+        <button
+          type="button"
+          title="Tiến tới"
+          onClick={() => runAction('forward')}
+          className="rounded-lg p-2 text-gray-300 hover:bg-white/10"
+        >
           <ArrowRight size={16} />
         </button>
 
-        <button type="button" title="Tải lại" onClick={() => runAction('reload')}
-          className="rounded-lg p-2 text-gray-300 hover:bg-white/10">
+        <button
+          type="button"
+          title="Tải lại"
+          onClick={() => runAction('reload')}
+          className="rounded-lg p-2 text-gray-300 hover:bg-white/10"
+        >
           <RotateCw size={16} />
         </button>
 
@@ -117,27 +168,44 @@ export default function EmbeddedBrowser() {
               className="w-full min-w-0 bg-transparent py-2 text-sm text-gray-200 outline-none"
             />
           </div>
-          <button type="submit" disabled={loading}
-            className="rounded-lg bg-violet-600 px-3 py-2 text-sm hover:bg-violet-500 disabled:opacity-50">
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="rounded-lg bg-violet-600 px-3 py-2 text-sm hover:bg-violet-500 disabled:opacity-50"
+          >
             {loading ? 'Đang mở...' : 'Đi đến'}
           </button>
         </form>
+
+        <button
+          type="button"
+          title={expanded ? 'Thu nhỏ trình duyệt' : 'Phóng to trình duyệt'}
+          onClick={() => setExpanded((value) => !value)}
+          className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-200 hover:bg-white/10"
+        >
+          {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          <span>{expanded ? 'Thu nhỏ' : 'Phóng to'}</span>
+        </button>
       </div>
 
       {error && (
-        <p className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+        <p className="shrink-0 border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300">
           {error}
         </p>
       )}
 
-      <div className="px-4 py-2 text-xs text-gray-500">
+      <div className="shrink-0 truncate px-4 py-2 text-xs text-gray-500">
         {currentUrl || 'Nhập địa chỉ web ở trên'}
       </div>
 
       <div
         ref={viewportRef}
-        className="relative min-h-[420px] border-t border-white/5 bg-[#0b0d12]"
+        className={`relative min-h-[420px] border-t border-white/5 bg-[#0b0d12] ${
+          expanded ? 'min-h-0 flex-1' : 'h-[650px]'
+        }`}
       />
     </section>
   )
 }
+

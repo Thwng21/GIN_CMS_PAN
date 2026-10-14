@@ -1,6 +1,14 @@
 import { useState } from 'react'
 import * as XLSX from 'xlsx'
-import { Download, FileSpreadsheet, RotateCcw } from 'lucide-react'
+
+import {
+  Download,
+  FileSpreadsheet,
+  RotateCcw,
+  Globe,
+  PanelsTopLeft,
+  LoaderCircle,
+} from 'lucide-react'
 
 import ExcelUploader from './shd/components/ExcelUploader'
 import SHDStats from './shd/components/SHDStats'
@@ -11,9 +19,34 @@ import SHDLog from './shd/components/SHDLog'
 import EmbeddedBrowser from './shd/components/EmbeddedBrowser'
 
 const fields = [
-  'SHD', 'TÊN KH', 'DOB', 'CMND/CCCD', 'SDT',
-  'GIN', 'Chức Danh', 'TÊN CTY', 'PB',
+  'SHD',
+  'TÊN KH',
+  'DOB',
+  'CMND/CCCD',
+  'SDT',
+  'GIN',
+  'Chức Danh',
+  'TÊN CTY',
+  'PB',
 ]
+
+const aliases = {
+  SHD: ['shd'],
+  'TÊN KH': ['tenkh', 'hotenkh', 'khachhang', 'customername'],
+  DOB: ['dob', 'ngaysinh', 'birthday'],
+  'CMND/CCCD': [
+    'cmndcccd',
+    'cmnd',
+    'cccd',
+    'socccd',
+    'identitynumber',
+  ],
+  SDT: ['sdt', 'sodienthoai', 'phone', 'phonenumber'],
+  GIN: ['gin'],
+  'Chức Danh': ['chucdanh', 'position', 'title'],
+  'TÊN CTY': ['tencty', 'tencongty', 'company', 'companyname'],
+  PB: ['pb', 'phongban', 'department'],
+}
 
 function normalizeHeader(value) {
   return String(value ?? '')
@@ -25,65 +58,140 @@ function normalizeHeader(value) {
     .toLowerCase()
 }
 
-const aliases = {
-  SHD: ['shd'],
-  'TÊN KH': ['tenkh', 'hotenkh', 'khachhang', 'customername'],
-  DOB: ['dob', 'ngaysinh', 'birthday'],
-  'CMND/CCCD': ['cmndcccd', 'cmnd', 'cccd', 'socccd', 'identitynumber'],
-  SDT: ['sdt', 'sodienthoai', 'phone', 'phonenumber'],
-  GIN: ['gin'],
-  'Chức Danh': ['chucdanh', 'position', 'title'],
-  'TÊN CTY': ['tencty', 'tencongty', 'company', 'companyname'],
-  PB: ['pb', 'phongban', 'department'],
-}
-
 function normalizeRow(source) {
   const result = {}
   const sourceEntries = Object.entries(source)
 
   for (const field of fields) {
-    const candidates = aliases[field]
     const match = sourceEntries.find(([key]) =>
-      candidates.includes(normalizeHeader(key))
+      aliases[field].includes(normalizeHeader(key))
     )
-    result[field] = match ? String(match[1] ?? '').trim() : ''
+
+    result[field] = match
+      ? String(match[1] ?? '').trim()
+      : ''
   }
 
   return result
 }
 
 function getTime() {
-  return new Date().toLocaleTimeString('vi-VN', { hour12: false })
+  return new Date().toLocaleTimeString('vi-VN', {
+    hour12: false,
+  })
 }
 
 export default function SHDPage() {
   const [rows, setRows] = useState([])
   const [fileName, setFileName] = useState('')
   const [search, setSearch] = useState('')
+
   const [concurrency, setConcurrency] = useState(3)
   const [timeout, setTimeoutValue] = useState(30)
+
   const [logs, setLogs] = useState([
-    { time: getTime(), type: 'info', message: 'SHD Tool đã sẵn sàng.' },
+    {
+      time: getTime(),
+      type: 'info',
+      message: 'SHD Tool đã sẵn sàng.',
+    },
   ])
+
   const [busy, setBusy] = useState(false)
   const [browserOpen, setBrowserOpen] = useState(false)
 
-  const addLog = (message, type = 'info') => {
+  const [toolMode, setToolMode] = useState('app')
+  const [loadingTool, setLoadingTool] = useState(false)
+
+  function addLog(message, type = 'info') {
     setLogs((current) => [
       ...current,
-      { time: getTime(), type, message },
+      {
+        time: getTime(),
+        type,
+        message,
+      },
     ])
   }
 
+  async function handleToolInWeb() {
+    if (!window.browserAPI) {
+      addLog(
+        'Không tìm thấy browserAPI. Hãy khởi động lại Electron.',
+        'error'
+      )
+      return
+    }
+
+    try {
+      setLoadingTool(true)
+
+      if (!browserOpen) {
+        await window.browserAPI.show()
+        setBrowserOpen(true)
+      }
+
+      const result = await window.browserAPI.loadShdTool()
+
+      addLog(
+        result.message || 'Đã nạp SHD V6.',
+        'success'
+      )
+
+      setToolMode('web')
+    } catch (error) {
+      addLog(
+        error?.message || 'Không thể nạp SHD V6.',
+        'error'
+      )
+    } finally {
+      setLoadingTool(false)
+    }
+  }
+
+  async function toggleBrowser() {
+    try {
+      if (!window.browserAPI) {
+        addLog(
+          'Không tìm thấy browserAPI. Hãy khởi động lại Electron.',
+          'error'
+        )
+        return
+      }
+
+      if (browserOpen) {
+        await window.browserAPI.hide()
+        setBrowserOpen(false)
+      } else {
+        await window.browserAPI.show()
+        setBrowserOpen(true)
+      }
+    } catch (error) {
+      addLog(
+        error?.message || 'Không thể điều khiển trình duyệt.',
+        'error'
+      )
+    }
+  }
+
   async function handleFile(file) {
+    if (!file) return
+
     try {
       setBusy(true)
 
       const buffer = await file.arrayBuffer()
-      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
+
+      const workbook = XLSX.read(buffer, {
+        type: 'array',
+        cellDates: true,
+      })
+
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
 
-      if (!sheet) throw new Error('File không có sheet dữ liệu.')
+      if (!sheet) {
+        throw new Error('File không có sheet dữ liệu.')
+      }
 
       const sourceRows = XLSX.utils.sheet_to_json(sheet, {
         defval: '',
@@ -103,10 +211,18 @@ export default function SHDPage() {
       setRows(parsedRows)
       setFileName(file.name)
       setSearch('')
-      addLog(`Đã đọc ${parsedRows.length} bản ghi từ ${file.name}.`)
+
+      addLog(
+        `Đã đọc ${parsedRows.length} bản ghi từ ${file.name}.`,
+        'success'
+      )
+
       addLog('Hãy kiểm tra tên cột và dữ liệu trước khi tiếp tục.')
     } catch (error) {
-      addLog(error.message || 'Không thể đọc file.', 'error')
+      addLog(
+        error?.message || 'Không thể đọc file.',
+        'error'
+      )
     } finally {
       setBusy(false)
     }
@@ -121,15 +237,25 @@ export default function SHDPage() {
     const missingSHD = rows.filter((row) => !row.SHD).length
 
     addLog(`Đã kiểm tra ${rows.length} bản ghi.`)
-    addLog(`Cấu hình: ${concurrency} tác vụ đồng thời, timeout ${timeout} giây.`)
+
+    addLog(
+      `Cấu hình: ${concurrency} tác vụ đồng thời, timeout ${timeout} giây.`
+    )
 
     if (missingSHD > 0) {
-      addLog(`Có ${missingSHD} bản ghi thiếu SHD. Cần kiểm tra lại.`, 'error')
+      addLog(
+        `Có ${missingSHD} bản ghi thiếu SHD. Cần kiểm tra lại.`,
+        'error'
+      )
     } else {
-      addLog('Các bản ghi đều có SHD. Dữ liệu đã sẵn sàng để tích hợp bộ xử lý.')
+      addLog(
+        'Các bản ghi đều có SHD. Dữ liệu đã sẵn sàng để tích hợp bộ xử lý.'
+      )
     }
 
-    addLog('Chưa gửi dữ liệu đến website: bộ tự động hóa chưa được tích hợp.')
+    addLog(
+      'Chưa gửi dữ liệu đến website: bộ tự động hóa trong chế độ app chưa được tích hợp.'
+    )
   }
 
   function exportExcel() {
@@ -139,50 +265,117 @@ export default function SHDPage() {
     }
 
     const exportRows = rows.map((row) =>
-      Object.fromEntries(fields.map((field) => [field, row[field] ?? '']))
+      Object.fromEntries(
+        fields.map((field) => [
+          field,
+          row[field] ?? '',
+        ])
+      )
     )
 
-    const worksheet = XLSX.utils.json_to_sheet(exportRows, { header: fields })
+    const worksheet = XLSX.utils.json_to_sheet(
+      exportRows,
+      { header: fields }
+    )
+
     worksheet['!cols'] = fields.map((field) => ({
       wch: Math.max(field.length + 4, 16),
     }))
 
     const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'SHD Results')
-    XLSX.writeFile(workbook, `SHD-Results-${new Date().toISOString().slice(0, 10)}.xlsx`)
 
-    addLog(`Đã xuất ${rows.length} bản ghi ra Excel.`)
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      'SHD Results'
+    )
+
+    XLSX.writeFile(
+      workbook,
+      `SHD-Results-${new Date().toISOString().slice(0, 10)}.xlsx`
+    )
+
+    addLog(
+      `Đã xuất ${rows.length} bản ghi ra Excel.`,
+      'success'
+    )
   }
 
   function resetData() {
     setRows([])
     setFileName('')
     setSearch('')
+
     addLog('Đã xóa dữ liệu khỏi phiên làm việc hiện tại.')
   }
 
   const stats = {
     total: rows.length,
-    success: 0,
-    pending: rows.length,
-    errors: 0,
+    success: rows.filter(
+      (row) => row.__status === 'Thành công'
+    ).length,
+    pending: rows.filter(
+      (row) => row.__status === 'Chưa xử lý'
+    ).length,
+    errors: rows.filter(
+      (row) => row.__status === 'Lỗi'
+    ).length,
   }
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
+      {/* Tiêu đề và nhóm nút điều khiển */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.18em] text-violet-400">
             <FileSpreadsheet size={15} />
             AUTOMATION WORKSPACE
           </div>
-          <h1 className="mt-2 text-2xl font-bold">SHD Tool</h1>
+
+          <h1 className="mt-2 text-2xl font-bold">
+            SHD Tool
+          </h1>
+
           <p className="mt-2 text-sm text-gray-400">
-            Nhập dữ liệu, kiểm tra bản ghi và chuẩn bị tác vụ xử lý SHD.
+            Quản lý dữ liệu Excel và chọn nơi chạy công cụ SHD.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleToolInWeb}
+            disabled={loadingTool}
+            className="flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2.5 text-sm font-medium transition hover:bg-violet-500 disabled:opacity-50"
+          >
+            {loadingTool ? (
+              <LoaderCircle
+                size={15}
+                className="animate-spin"
+              />
+            ) : (
+              <Globe size={15} />
+            )}
+
+            {loadingTool ? 'Đang nạp...' : 'Tool in web'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setToolMode('app')
+              addLog('Đã chọn chế độ quản lý trong ứng dụng.')
+            }}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${
+              toolMode === 'app'
+                ? 'bg-emerald-600 text-white'
+                : 'border border-white/10 text-gray-300 hover:bg-white/5'
+            }`}
+          >
+            <PanelsTopLeft size={15} />
+            Tool in app
+          </button>
+
           <button
             type="button"
             onClick={resetData}
@@ -192,6 +385,7 @@ export default function SHDPage() {
             <RotateCcw size={15} />
             Xóa dữ liệu
           </button>
+
           <button
             type="button"
             onClick={exportExcel}
@@ -204,49 +398,58 @@ export default function SHDPage() {
         </div>
       </div>
 
+      {/* Chế độ hiện tại */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-gray-500">
+          Chế độ hiện tại:
+        </span>
+
+        <span
+          className={`rounded-full px-2.5 py-1 ${
+            toolMode === 'web'
+              ? 'bg-violet-500/15 text-violet-300'
+              : 'bg-emerald-500/15 text-emerald-300'
+          }`}
+        >
+          {toolMode === 'web' ? 'Tool in web' : 'Tool in app'}
+        </span>
+      </div>
+
       <SHDStats stats={stats} />
 
+      {/* Trình duyệt nhúng */}
       <section className="rounded-xl border border-white/10 bg-[#10131a] p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-semibold">Trình duyệt website</h2>
+            <h2 className="font-semibold">
+              Trình duyệt website
+            </h2>
+
             <p className="mt-1 text-xs text-gray-500">
-              Mở website trong cửa sổ ứng dụng để chuẩn bị thao tác.
+              Mở website được cấp quyền trong ứng dụng trước khi nạp SHD V6.
             </p>
           </div>
+
           <button
             type="button"
-            onClick={async () => {
-              try {
-                if (!window.browserAPI) {
-                  addLog('Không tìm thấy browserAPI. Hãy khởi động lại Electron.', 'error')
-                  return
-                }
-
-                if (browserOpen) {
-                  await window.browserAPI.hide()
-                  setBrowserOpen(false)
-                } else {
-                  await window.browserAPI.show()
-                  setBrowserOpen(true)
-                }
-              } catch (error) {
-                addLog(error.message || 'Không thể điều khiển trình duyệt.', 'error')
-              }
-            }}
+            onClick={toggleBrowser}
             className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium hover:bg-violet-500"
           >
             {browserOpen ? 'Ẩn trình duyệt' : 'Hiện trình duyệt'}
           </button>
         </div>
+
         {browserOpen && <EmbeddedBrowser />}
       </section>
 
-
+      {/* Excel và cấu hình */}
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <section className="rounded-xl border border-white/10 bg-[#10131a] p-5">
           <div className="mb-4">
-            <h2 className="font-semibold">Dữ liệu đầu vào</h2>
+            <h2 className="font-semibold">
+              Dữ liệu đầu vào
+            </h2>
+
             <p className="mt-1 text-xs text-gray-500">
               Chọn file Excel có tiêu đề cột ở hàng đầu tiên.
             </p>
@@ -259,11 +462,14 @@ export default function SHDPage() {
           />
 
           {busy && (
-            <p className="mt-3 text-xs text-violet-300">Đang đọc file...</p>
+            <p className="mt-3 text-xs text-violet-300">
+              Đang đọc file...
+            </p>
           )}
 
           <p className="mt-3 text-xs leading-5 text-gray-500">
-            Các cột dự kiến: SHD, TÊN KH, DOB, CMND/CCCD, SDT, GIN, Chức Danh, TÊN CTY, PB.
+            Các cột dự kiến: SHD, TÊN KH, DOB, CMND/CCCD,
+            SDT, GIN, Chức Danh, TÊN CTY, PB.
             Cột không khớp sẽ để trống trong bảng.
           </p>
         </section>
@@ -278,8 +484,14 @@ export default function SHDPage() {
         />
       </div>
 
-      <SHDTable rows={rows} search={search} setSearch={setSearch} />
+      {/* Bảng dữ liệu */}
+      <SHDTable
+        rows={rows}
+        search={search}
+        setSearch={setSearch}
+      />
 
+      {/* Tiến trình và log */}
       <div className="grid gap-5 xl:grid-cols-2">
         <SHDProgress total={rows.length} />
         <SHDLog logs={logs} />
